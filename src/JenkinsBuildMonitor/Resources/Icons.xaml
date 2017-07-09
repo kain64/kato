@@ -9,6 +9,9 @@
 	<DataTemplate x:Key="SuccessAndBuildingOverlayIcon">
 		<Image Source="../Images/yellow.ico" Width="14" Height="14" />
 	</DataTemplate>
+	<DataTemplate x:Key="MeBlaimed">
+		<Image Source="../Images/redst.ico" Width="14" Height="14" />
+	</DataTemplate>
 
 	<DataTemplate x:Key="FailedOverlayIcon">
 		<Grid Width="14" Height="14">

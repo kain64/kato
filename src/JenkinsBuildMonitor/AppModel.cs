@@ -3,12 +3,14 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Data;
 using System.Deployment.Application;
 using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -19,6 +21,7 @@ using System.Xml.Linq;
 using Caliburn.Micro;
 using CredentialManagement;
 using Hardcodet.Wpf.TaskbarNotification;
+using HtmlAgilityPack;
 using JenkinsApiClient;
 using Kato.Properties;
 using SecureCredentialsLibrary;
@@ -264,8 +267,99 @@ namespace Kato
 				job.IsHidden = !string.IsNullOrWhiteSpace(m_subscribeFilter) && !job.Name.ToLower().Contains(m_subscribeFilter.ToLower());
 		}
 
+		private void LoadClaims()
+		{
+            try
+            {
+                Regex regex = new Regex(@"(.*\:\d+/).*");
+                Dictionary<string, dynamic> servers = new Dictionary<string, dynamic>();
+                foreach (var server in m_servers)
+                {
+                    var match = regex.Match(server.DomainUrl);
+	                var url = match.Groups[1].ToString();
+                    if (servers.ContainsKey(url))
+                    {
+                        continue;
+                    }
+	                servers.Add(url, new { Url = url, Credentials = server.Client.Credentials });
+                }
+                foreach (var server in servers)
+                {
+                    string userName = server.Value.Credentials.UserName;
+                    string password = server.Value.Credentials.Password;
+                    string url = server.Value.Url + "claims/";
+
+
+                    var webClient = new System.Net.WebClient();
+
+                    // Create a basic auth token from a username and password seperated by a colon then base 64encoded
+                    string basicAuthToken = Convert.ToBase64String(Encoding.Default.GetBytes(userName + ":" + password));
+                    webClient.Headers["Authorization"] = "Basic " + basicAuthToken;
+
+
+                    var page = webClient.DownloadString(url);
+
+                    HtmlDocument htmlDocument = new HtmlDocument();
+                    htmlDocument.LoadHtml(page);
+
+                    var table = htmlDocument.GetElementbyId("projectStatus");
+                    htmlDocument.LoadHtml(table.InnerHtml);
+                    var meIsBlamed = false;
+                    var isUnclaimed = false;
+                    using (DataTable dbTable = new DataTable())
+                    {
+                        var headers = htmlDocument.DocumentNode.SelectNodes("//tr/th");
+                        foreach (HtmlNode header in headers)
+                            dbTable.Columns.Add(header.InnerText);
+
+                        foreach (var row in htmlDocument.DocumentNode.SelectNodes("//tr[td]"))
+                            dbTable.Rows.Add(row.SelectNodes("td").Select(td => td.InnerText).ToArray());
+
+                        var currentUser = ("assigned to " + Environment.UserName).ToLower();
+
+
+
+                        foreach (DataRow row in dbTable.Rows)
+                        {
+                            meIsBlamed = (row[3] != null ? row[3].ToString().ToLower() : "").Contains(currentUser);
+                            isUnclaimed = isUnclaimed || string.Equals("unclaimed", (row[3] != null ? row[3].ToString().Trim() : ""),
+                                              StringComparison.CurrentCultureIgnoreCase);
+                            if (meIsBlamed)
+                            {
+                                break;
+                            }
+
+                        }
+
+
+                        if (!meIsBlamed)
+                        {
+                            if (isUnclaimed)
+                            {
+                                StreamResourceInfo streamInfo = Application.GetResourceStream(new Uri("/Images/red.ico", UriKind.Relative));
+                                m_notifyIcon.Icon = new Icon(streamInfo.Stream);
+                            }
+                            else if (dbTable.Rows.Count > 0)
+                            {
+                                StreamResourceInfo streamInfo = Application.GetResourceStream(new Uri("/Images/orange.ico", UriKind.Relative));
+                                m_notifyIcon.Icon = new Icon(streamInfo.Stream);
+                            }
+                        }
+                        else
+                        {
+                            m_notifyIcon.ShowBalloonTip("Warning", "You are claimed on build fail.", BalloonIcon.Error);
+                        }
+                    }
+                }
+            }catch(Exception ex)
+            {
+                //ignore
+            }
+
+		}
 		private void Update()
 		{
+			
 			if (!m_servers.Any())
 				return;
 
@@ -281,7 +375,7 @@ namespace Kato
 				m_notifyIcon.Icon = new Icon(streamInfo.Stream);
 				m_overallStatus = status;
 			}
-
+			LoadClaims();
 			SubscribedJobs = new ObservableCollection<JobViewModel>(subscribedJobs);
 			Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new System.Action(SetTaskBarStatus));
 		}

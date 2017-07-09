@@ -24,14 +24,17 @@ namespace Kato
 	{
 		public ServerViewModel(JenkinsClient client, Server server)
 		{
-			m_server = server;
+            m_server = server;
 			m_jobs = new ObservableCollection<JobViewModel>();
 			m_client = client;
 
 			Initialize();
 		}
-
-		public ObservableCollection<JobViewModel> Jobs { get { return m_jobs; } }
+        public JenkinsClient Client
+        {
+            get { return m_client; }
+        }
+        public ObservableCollection<JobViewModel> Jobs { get { return m_jobs; } }
 		public string DomainUrl { get { return m_client.BaseUri.OriginalString; } }
 		public bool RequiresAuthentication { get { return m_server.RequiresAuthentication; } }
 		public string Description { get; private set; }
