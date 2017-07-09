@@ -318,14 +318,16 @@ namespace Kato
                         var currentUser = ("assigned to " + Environment.UserName).ToLower();
 
 
-
+	                    string blameStatus = string.Empty;
                         foreach (DataRow row in dbTable.Rows)
                         {
-                            meIsBlamed = (row[3] != null ? row[3].ToString().ToLower() : "").Contains(currentUser);
-                            isUnclaimed = isUnclaimed || string.Equals("unclaimed", (row[3] != null ? row[3].ToString().Trim() : ""),
+	                        var statusString = row[4];
+	                        meIsBlamed = (statusString != null ? statusString.ToString().ToLower() : "").Contains(currentUser);
+                            isUnclaimed = isUnclaimed || string.Equals("unclaimed", (statusString != null ? statusString.ToString().Trim() : ""),
                                               StringComparison.CurrentCultureIgnoreCase);
                             if (meIsBlamed)
                             {
+	                            blameStatus = statusString.ToString();
                                 break;
                             }
 
@@ -347,7 +349,11 @@ namespace Kato
                         }
                         else
                         {
-                            m_notifyIcon.ShowBalloonTip("Warning", "You are claimed on build fail.", BalloonIcon.Error);
+	                        if ((DateTime.Now - m_lastMeBlaimedMessageTime) > new TimeSpan(0, 0, 5, 0, 0))
+	                        {
+		                        m_lastMeBlaimedMessageTime = DateTime.Now; 
+		                        m_notifyIcon.ShowBalloonTip("Warning: Build Failed", blameStatus, BalloonIcon.Error);
+	                        }
                         }
                     }
                 }
@@ -645,5 +651,6 @@ namespace Kato
 		private bool m_isUpdateAvailable;
 		private JobViewModel m_selectedProject;
 		ObservableCollection<JobViewModel> m_subscribedJobs;
+		private DateTime m_lastMeBlaimedMessageTime=DateTime.MinValue;
 	}
 }
